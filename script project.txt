@@ -1,0 +1,44 @@
+mkdir ACU
+mkdir GB
+mkdir decipher
+
+cd ACU
+openssl genrsa -out ACU.key 2048
+openssl req -new -key ACU.key -out ACU.csr
+cp ACU.csr /home/decipher/decipher
+cd ../GB
+
+openssl genrsa -out GB.key 2048
+openssl req -new -key GB.key -out GB.csr
+cp GB.csr /home/decipher/decipher
+cd ../decipher
+
+openssl genrsa -des3 -out decipher_CA.key 2048
+openssl req -x509 -new -nodes -key decipher_CA.key -sha256 -days 730 -out decipher_CA_cert.der
+openssl x509 -req -in ACU.csr -CA decipher_CA_cert.der -CAkey decipher_CA.key -CAcreateserial -out ACU.crt -days 730 -sha256
+openssl x509 -req -in GB.csr -CA decipher_CA_cert.der -CAkey decipher_CA.key -CAcreateserial -out GB.crt -days 730 -sha256
+cp ACU.crt /home/decipher/ACU
+cp GB.crt /home/decipher/ACU
+cp GB.crt /home/decipher/GB
+
+powershell
+cd documents
+cd crypto project
+scp decipher@<ip address>:/home/decipher/decipher/ACU.crt .
+scp decipher@<ip address>:/home/decipher/decipher/GB.crt .
+scp decipher@<ip address>:/home/decipher/decipher/decipher_CA_cert.der .
+scp dataset.xml root@<ip address>:/home/decipher/ACU
+
+cd ../ACU
+openssl rsa -in ACU.key -pubout -out ACU_pub.pem
+openssl dgst -sha512 -sign ACU.key -out digest.sha512 dataset.xml
+gzip dataset.xml
+openssl smime -encrypt -aes256 -in dataset.xml.gz -binary -out dataset.xml.gz.enc GB.cert
+cp dataset.xml.gz.enc /home/decipher/GB
+cd ../GB
+
+openssl smime -decrypt -in dataset.xml.gz.enc -inkey GB.key -out dataset.xml.gz
+gunzip dataset.xml.gz
+cp /home/decipher/ACU/digest.sha512 .
+cp /home/decipher/ACU/digest.ACU_pub.pem .
+openssl dgst -sha512 -verify ACU_pub.pem -signature digest.sha512 dataset.xml
